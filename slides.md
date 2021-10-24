@@ -1600,6 +1600,92 @@ if __name__ == "__main__":
 `python3.7 run_pipeline.py`
 
 
+---
+
+## Schedule
+
+----
+
+### 示範程式
+```python
+import os
+from azureml.core import Workspace
+from azureml.core.authentication import InteractiveLoginAuthentication
+from azureml.pipeline.core import PublishedPipeline
+
+from azureml.pipeline.core.schedule import ScheduleRecurrence, Schedule, TimeZone
+
+
+def main():
+
+    interactive_auth = InteractiveLoginAuthentication(tenant_id=os.getenv("TENANT_ID"))
+    work_space = Workspace.from_config(auth=interactive_auth)
+    # 只有已發布的 pipeline 才能進行排程
+    pipelines = PublishedPipeline.list(work_space)
+    pipeline_id = next(
+        p_l.id for p_l in pipelines if p_l.name == "pipeline_data_train_deploy"
+    )
+    # 排程的時候，要注意時區，才能確保在正確的時間執行
+    recurrence = ScheduleRecurrence(
+        frequency="Week", # 觸發排程頻率的時間單位，可以是 "Minute"、"Hour"、"Day"、"Week" 或 "Month"。
+        interval=1, # 間隔多少時間單位觸發
+        start_time="2021-07-21T07:00:00", 
+        time_zone=TimeZone.TaipeiStandardTime,
+        week_days=["Sunday"], # 如果每週執行的話，可以選擇某一天執行
+        time_of_day="6:00",
+    )
+    Schedule.create(
+        work_space,
+        name="pipeline_data_train_deploy",
+        description="Get data, train model and deploy service at 6:00 every Sunday",
+        pipeline_id=pipeline_id,
+        experiment_name="pipeline_data_train_deploy",
+        recurrence=recurrence,
+    )
+
+
+if __name__ == "__main__":
+    main()
+```
+
+----
+
+執行`python3.7 create_schedule.py`之後，其實無法從`workspace`看到排程的相關資訊，不過可以透過以下做法得知目前所有排程
+
+```python
+import os
+from azureml.core import Workspace
+from azureml.core.authentication import InteractiveLoginAuthentication
+from azureml.pipeline.core import PublishedPipeline
+from azureml.pipeline.core.schedule import Schedule
+
+interactive_auth = InteractiveLoginAuthentication(tenant_id=os.getenv("TENANT_ID"))
+work_space = Workspace.from_config(auth=interactive_auth)
+
+sche_list = Schedule.list(work_space)
+print(sche_list)
+```
+
+----
+
+![](media/ml_31.png)
+
+
+----
+
+這樣就能看到排程的資訊，其中也包含了詳細的執行頻率與時間，例如：每週日早上六點執行一次。
+
+另外，如果管線已安排排程，那就必須把`schedule`刪掉，才能刪除`pipeline`。以上述情況為例：
+
+```python
+
+sche = next(s for s in sche_list if s.id == "18ff1269-d837-42b6-85f1-972171ef6216")
+sche.disable()
+pipe_list = PublishedPipeline.list(work_space)
+pipe = next(p_l.id for p_l in pipe_list if p_l.name == "pipeline_data_train_deploy")
+pipe.disable()
+```
+一開始比較不熟悉，應該會很常刪掉管線和排程，重複實驗，所以提供大家參考。
 
 
 ---
