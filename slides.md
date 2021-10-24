@@ -1080,6 +1080,529 @@ python3.7 predict_currency_azml.py -e 你的 API 連結
 
 ---
 
+## Pipeline for data
+
+----
+
+
+- `Pipeline`，流水線或管線，顧名思義，就是讓程式碼，按照使用者安排的順序一一執行，Azure machine learning 也有提供這樣的服務，所以我們可以把前面幾篇文章所做的事情，全部交給流水線執行。第一件事情，要先解決資料更新的問題，取得最新資料，並且將其存進 datastore，然後註冊這份資料。在此，我們繼續以匯率為例，來示範如何用`pipeline`更新資料。
+
+----
+
+- 執行`pipeline`一樣至少需要兩份以上的 py 檔，將需要執行的任務，分別寫成不同的 py 檔，然後再整合在一起交由`pipeline`執行。
+- `get_currency.py`：之前在上傳資料時介紹過，這次要以維護資料的角度改寫。
+- `run_pipeline_data.py`：在本地端執行，便可把`get_currency.py`上傳到`workspace`執行。
+
+----
+
+### 示範程式
+
+`get_currency.py`
+```python
+import argparse
+from datetime import datetime
+import os
+import pickle
+import pandas as pd
+import investpy
+from sklearn.preprocessing import MinMaxScaler
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--history", type=bool, default=False)
+    parser.add_argument("--target_folder", type=str)
+    parser.add_argument("--input_folder", type=str)
+    args = parser.parse_args()
+    return args
+
+# 以 history 這個變數作為區隔的依據，history 為 True，則是在本地端執行；反之，則是利用`pipeline`執行
+def main():
+    args = parse_args()
+    if args.history:
+        if not os.path.isdir("currency"):
+            os.system("mkdir currency")
+
+        usd_twd = investpy.get_currency_cross_historical_data(
+            "USD/TWD",
+            from_date="01/01/1900",
+            to_date=datetime.now().strftime("%d/%m/%Y"),
+        )
+        usd_twd.reset_index(inplace=True)
+        usd_twd.to_csv("currency/usd_twd.csv", index=False)
+        currency_data = usd_twd.Close.values.reshape(-1, 1)
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        scaler.fit(currency_data)
+        with open("currency/scaler.pickle", "wb") as f_h:
+            pickle.dump(scaler, f_h)
+        f_h.close()
+        currency_data = usd_twd[
+            (usd_twd.Date >= "2010-01-01") & (usd_twd.Date < "2021-01-01")
+        ]
+        currency_data.to_csv("currency/training_data.csv")
+    # 以上都跟之前一模一樣
+    
+    else:
+        # 目標是從 input_path 取得舊的資料，與最新資料結合，將更新的結果存進 path。
+        path = os.path.join(args.target_folder, "usd_twd.csv")
+        input_path = os.path.join(args.input_folder, "usd_twd.csv")
+        history = pd.read_csv(input_path)
+
+        recent = investpy.get_currency_cross_recent_data("USD/TWD")
+        recent.reset_index(inplace=True)
+        history = history.append(recent, ignore_index=True)
+        history.drop_duplicates(subset="Date", keep="last", inplace=True)
+        history.to_csv(path, index=False)
+        # 將最近 2400 天的資料作為訓練用的資料
+        history = history.tail(2400)
+        history.to_csv(
+            os.path.join(args.target_folder, "training_data.csv"), index=False
+        )
+        
+        # 接著就必須要註冊資料，資料才會真的更新。
+        run = Run.get_context()
+        work_space = run.experiment.workspace
+        datastore = work_space.get_default_datastore()
+        dataset = Dataset.File.from_files(path=(datastore, 'currency'))
+        dataset.register(work_space, name='currency')
+
+if __name__ == "__main__":
+    main()
+
+```
+
+----
+
+要注意的是，雖然在這邊要做的事情是，讀取就資料，合併新資料後，更新資料。但是，輸入的資料夾路徑和輸出的資料夾路徑不能為同一個路徑，否則就會得到錯誤訊息：***Graph shouldn't have cycles***。可以利用`OutputFileDatasetConfig`這個`class`解決這個問題，讓資料先暫存，之後再推向 datastore。
+
+----
+
+`run_pipeline_data.py`
+```python
+import os
+from azureml.data import OutputFileDatasetConfig
+from azureml.pipeline.steps import PythonScriptStep
+from azureml.core.runconfig import RunConfiguration
+from azureml.core import Workspace, Experiment, Dataset
+from azureml.core.authentication import InteractiveLoginAuthentication
+from azureml.pipeline.core import Pipeline
+
+
+def main():
+    # 起手式，一定要先取得 workspace 權限
+    interactive_auth = InteractiveLoginAuthentication(tenant_id=os.getenv("TENANT_ID"))
+    work_space = Workspace.from_config(auth=interactive_auth)
+    datastore = work_space.get_default_datastore()
+    # 設定 input folder 
+    input_folder = (
+        Dataset.File.from_files(path=(datastore, "currency"))
+        .as_named_input("input_folder")
+        .as_mount()
+    )
+    # 設定 output 路徑
+    dataset = (
+        OutputFileDatasetConfig(name="usd_twd", destination=(datastore, "currency"))
+        .as_upload(overwrite=True)
+        .register_on_complete(name="currency")
+    )
+    
+    # 選擇之前註冊的環境
+    aml_run_config = RunConfiguration()
+    environment = work_space.environments["train_lstm"]
+    aml_run_config.environment = environment
+    
+    # 設定管線中的步驟，把會用到的 py 檔、輸入和輸出的資料夾帶入
+    get_currency = PythonScriptStep(
+        name="get_currency",
+        script_name="get_currency.py",
+        compute_target="cpu-cluster",
+        runconfig=aml_run_config,
+        arguments=[
+            "--target_folder",
+            dataset,
+            "--input",
+            input_folder,
+        ],
+        allow_reuse=True,
+    )
+    # pipeline 的本質還是實驗，所以需要建立實驗，在把 pipeline帶入
+    experiment = Experiment(work_space, "get_currency")
+
+    pipeline = Pipeline(workspace=work_space, steps=[get_currency])
+    run = experiment.submit(pipeline)
+    run.wait_for_completion(show_output=True)
+    # 執行終了，發布 pipeline，以便可以重複使用 
+    run.publish_pipeline(
+        name="get_currency_pipeline",
+        description="Get currency with pipeline",
+        version="1.0",
+    )
+
+
+if __name__ == "__main__":
+    main()
+
+```
+
+----
+
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_28.png" -->
+
+`python3.7 run_pipeline_data.py`<!-- .element: class="fragment" data-fragment-index="1" -->
+
+
+
+----
+
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_29.png" -->
+點進`步驟`，再點選執行完的步驟，則會看到該實驗的各種細節，也方便後續除錯。
+
+---
+## Pipeline for model and service
+
+----
+
+### 示範程式
+
+`train_lstm.py`之前介紹過，這邊為了使用`pipeline`執行，也考慮後續重複使用的情況，這邊再稍微改造一下。下面針對新增的內容解釋：
+
+`train_lstm.py`
+```python
+import argparse
+import os
+import pickle
+import numpy as np
+from azureml.core.run import Run
+from azureml.core.model import Model
+import pandas as pd
+from keras.models import Sequential, load_model
+from keras.layers import Dense, LSTM, Dropout
+from keras.preprocessing.sequence import TimeseriesGenerator
+from keras.callbacks import TensorBoard, EarlyStopping
+
+
+def data_generator(data, data_len=240):
+    """
+    generate data for training and validation
+    """
+    generator = TimeseriesGenerator(
+        data=data, targets=range(data.shape[0]), length=data_len, batch_size=1, stride=1
+    )
+    x_all = []
+    for i in generator:
+        x_all.append(i[0][0])
+    x_all = np.array(x_all)
+    y_all = data[range(data_len, len(x_all) + data_len)]
+    rate = 0.4
+    x_train = x_all[: int(len(x_all) * (1 - rate))]
+    y_train = y_all[: int(y_all.shape[0] * (1 - rate))]
+    x_val = x_all[int(len(x_all) * (1 - rate)) :]
+    y_val = y_all[int(y_all.shape[0] * (1 - rate)) :]
+    return x_train, y_train, x_val, y_val
+
+
+def parse_args():
+    """
+    Parse arguments
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--target_folder", type=str, help="Path to the training data")
+    parser.add_argument(
+        "--experiment",
+        type=bool,
+        default=False,
+        help="Just run an experiment, there is no pipeline",
+    )
+    parser.add_argument(
+        "--log_folder", type=str, help="Path to the log", default="./logs"
+    )
+    args = parser.parse_args()
+    return args
+
+# 考慮後續訓練時，先讀取效果最好的模型，以此為基礎繼續訓練
+def load_best_model(work_space, model_name, x_val, y_val):
+    """
+    load the best model from registered models
+    """
+    model_obj = Model(work_space, model_name)
+    # 取得模型清單，擷取最近五個版本。除了版本 version 以外，屬性 properties 也是可以作為選擇模型的依據
+    model_list = model_obj.list(work_space, name=model_name)
+    version = [i.version for i in model_list]
+    version.sort(reverse=True)
+    # 選擇最近訓練的五個模型，並且以最近一段時間的資料評估模型的效果
+    version = version[:5]
+    val_loss = []
+    for i in version:
+        print(i)
+        model_obj = Model(work_space, model_name, version=i)
+        model_path = model_obj.download(exist_ok=True)
+        model = load_model(model_path)
+        val_loss.append(model.evaluate(x_val, y_val))
+    # 選擇 loss 最小的模型
+    model_obj = Model(
+        work_space, model_name, version=version[val_loss.index(min(val_loss))]
+    )
+    model_path = model_obj.download(exist_ok=True)
+    model = load_model(model_path)
+    return model, min(val_loss), version[val_loss.index(min(val_loss))]
+
+
+
+def main():
+    """
+    Training of LeNet with keras
+    """
+    args = parse_args()
+    # 在`workspace`執行時，取得當下資訊
+    run = Run.get_context()
+    usd_twd = pd.read_csv(os.path.join(args.target_folder, "training_data.csv"))
+    data = usd_twd.Close.values.reshape(-1, 1)
+    with open(os.path.join(args.target_folder, "scaler.pickle"), "rb") as f_h:
+        scaler = pickle.load(f_h)
+    f_h.close()
+    data = scaler.transform(data)
+    data_len = 240
+    x_train, y_train, x_val, y_val = data_generator(data, data_len)
+    # 單純執行實驗時，需要先定義模型架構，並且使用tensorboard
+    if args.experiment:
+        model = Sequential()
+        model.add(LSTM(16, input_shape=(data_len, 1)))
+        model.add(Dropout(0.1))
+        model.add(Dense(1))
+        model.compile(loss="mse", optimizer="adam")
+        # Tensorboard
+        callback = TensorBoard(
+            log_dir=args.log_folder,
+            histogram_freq=0,
+            write_graph=True,
+            write_images=True,
+            embeddings_freq=0,
+            embeddings_layer_names=None,
+            embeddings_metadata=None,
+        )
+    # 執行 pipeline 時，先讀取效果最好的模型
+    else:
+        # 取得`workspace`權限
+        work_space = run.experiment.workspace
+        model = load_best_model(work_space, model_name="currency", key="val_loss")
+        print("Load Model")
+        # 如果 val_loss 進步太慢，就結束訓練
+        callback = EarlyStopping(
+            monitor="val_loss", mode="min", min_delta=1e-8, patience=50
+        )
+    # train the network
+    history_callback = model.fit(
+        x_train,
+        y_train,
+        epochs=1000,
+        batch_size=240,
+        verbose=1,
+        validation_data=[x_val, y_val],
+        callbacks=[callback],
+    )
+    print("Finished Training")
+    # 以 validation data 確認模型的效果，保留效果好的模型
+    metrics = history_callback.history
+    # 若剛訓練好的模型比之前模型效果好，將訓練的細節記錄下來
+    if metrics["val_loss"][-1] <= loss_threshold:
+        run.log_list("train_loss", metrics["loss"][:10])
+        run.log_list("val_loss", metrics["val_loss"][:10])
+        run.log_list("start", [usd_twd.Date.values[0]])
+        run.log_list("end", [usd_twd.Date.values[-1]])
+        run.log_list("epoch", [len(history_callback.epoch)])
+        run.log_list("last_version", [version])
+        model.save("outputs/keras_lstm.h5")
+        properties = {
+            "train_loss": metrics["loss"][-1],
+            "val_loss": metrics["val_loss"][-1],
+            "data": "USD/TWD from {0} to {1}".format(
+                usd_twd.Date.values[0], usd_twd.Date.values[-1]
+            ),
+            "epoch": len(history_callback.epoch),
+            "last_version": version,
+        }
+    # 反之，則記錄 val_loss，以及說明此模型是繼承哪一個版本的模型
+    else:
+        run.log_list("val_loss", [loss_threshold])
+        run.log_list("last_version", [version])
+        origin_model.save("outputs/keras_lstm.h5")
+        properties = {"val_loss": loss_threshold, "last_version": version}
+    if args.experiment:
+        with open("outputs/scaler.pickle", "wb") as f_h:
+            pickle.dump(scaler, f_h)
+        f_h.close()
+    else:
+    # 為了讓整個流程自動化，所以訓練完，直接在`workspace`註冊模型
+        model = Model.register(
+            workspace=work_space,
+            model_name="currency",
+            tags={"model": "LSTM"},
+            model_path="outputs/keras_lstm.h5",
+            model_framework="keras",
+            model_framework_version="2.2.4",
+            properties=properties,
+        )
+        print("Registered Model")
+
+
+if __name__ == "__main__":
+    main()
+
+```
+
+----
+
+在訓練之後，選擇當下最佳的模型註冊，這樣在部署服務時，就可以直接使用最新版的模型部署服務。
+`deploy_currency_prediction`的內容不變，只是在執行`pipeline`時，`workspace`的權限也是必須靠`Run`取得。
+
+
+----
+
+`deploy_currency_prediction`
+```python
+
+import os
+import numpy as np
+from azureml.core import Model, Workspace
+from azureml.core import Run
+from azureml.core.model import InferenceConfig
+from azureml.core.webservice import AciWebservice
+from azureml.core.authentication import InteractiveLoginAuthentication
+
+
+def main():
+    """
+    Deploy model to your service
+    """
+    run = Run.get_context()
+    try:
+        work_space = run.experiment.workspace
+    except AttributeError:
+        interactive_auth = InteractiveLoginAuthentication(
+            tenant_id=os.getenv("TENANT_ID")
+        )
+        work_space = Workspace.from_config(auth=interactive_auth)
+    environment = work_space.environments["train_lstm"]
+    model = Model(work_space, "currency")
+    service_name = "currency-service"
+    inference_config = InferenceConfig(
+        entry_script="predict_currency.py", environment=environment
+    )
+    aci_config = AciWebservice.deploy_configuration(cpu_cores=1, memory_gb=1)
+    scaler = Model(work_space, name="scaler", version=1)
+    service = Model.deploy(
+        workspace=work_space,
+        name=service_name,
+        models=[model, scaler],
+        inference_config=inference_config,
+        deployment_config=aci_config,
+        overwrite=True,
+    )
+    service.wait_for_deployment(show_output=True)
+    print(service.get_logs())
+    print(service.scoring_uri)
+
+
+if __name__ == "__main__":
+    main()
+
+
+```
+
+
+----
+跟之前上一篇的`run_pipeline_data.py`比較起來，這邊會再新增兩個流程到`pipeline`之中，分別是為了模型訓練和服務部署。
+
+`run_pipeline.py`
+```python
+import os
+from azureml.data import OutputFileDatasetConfig
+from azureml.pipeline.steps import PythonScriptStep
+from azureml.core.runconfig import RunConfiguration
+from azureml.core import Workspace, Experiment, Dataset
+from azureml.core.authentication import InteractiveLoginAuthentication
+from azureml.pipeline.core import Pipeline
+
+
+def main():
+    interactive_auth = InteractiveLoginAuthentication(tenant_id=os.getenv("TENANT_ID"))
+    work_space = Workspace.from_config(auth=interactive_auth)
+    datastore = work_space.get_default_datastore()
+    input_folder = (
+        Dataset.File.from_files(path=(datastore, "currency"))
+        .as_named_input("input_folder")
+        .as_mount()
+    )
+    dataset = OutputFileDatasetConfig(
+        name="usd_twd", destination=(datastore, "currency")
+    )
+    aml_run_config = RunConfiguration()
+    environment = work_space.environments["train_lstm"]
+    aml_run_config.environment = environment
+    # 更新資料的步驟
+    get_currency = PythonScriptStep(
+        source_directory=".",
+        name="get_currency",
+        script_name="get_currency.py",
+        compute_target="cpu-cluster",
+        runconfig=aml_run_config,
+        arguments=[
+            "--target_folder",
+            dataset.as_upload(overwrite=True).register_on_complete(name="currency"),
+            "--input",
+            input_folder,
+        ],
+        allow_reuse=True,
+    )
+    # 訓練模型的步驟
+    training = PythonScriptStep(
+        source_directory=".",
+        name="train_lstm",
+        script_name="train_lstm.py",
+        compute_target="cpu-cluster",
+        runconfig=aml_run_config,
+        arguments=["--target_folder", dataset.as_input()],
+        allow_reuse=True,
+    )
+    # 部署服務的步驟
+    deploy = PythonScriptStep(
+        source_directory=".",
+        name="deploy_currency_prediction",
+        script_name="deploy_currency_prediction.py",
+        compute_target="cpu-cluster",
+        runconfig=aml_run_config,
+        allow_reuse=True,
+    )
+    experiment = Experiment(work_space, "pipeline_data_train_deploy")
+
+    pipeline = Pipeline(workspace=work_space, steps=[get_currency, training, deploy])
+    run = experiment.submit(pipeline)
+    run.wait_for_completion(show_output=True)
+    # Pipeline 必須被發布，才能在後續進行排程（schedule）
+    run.publish_pipeline(
+        name="pipeline_data_train_deploy",
+        description="data-->train-->deploy",
+        version="1.0",
+    )
+
+
+if __name__ == "__main__":
+    main()
+
+
+```
+
+
+----
+
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_30.png" -->
+
+`python3.7 run_pipeline.py`
+
+
+
+
+---
 
 ## 參考資料
 - Azure Machine Learning documentation: https://tinyurl.com/yxzjslm5
