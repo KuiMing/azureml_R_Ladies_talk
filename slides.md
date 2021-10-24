@@ -872,201 +872,214 @@ iplot(fig, filename='test')
 ![](media/ml_25.png)
               
 ---
-                    
-### 部署服務
 
-- 部署服務時，需要兩個script
-  1. 一個在 Workspace 利用運算群組執行 `score_keras.py`
-  2. 另一個 script `deploy_service.py` 在本機執行，將預測的服務在 Workspace 部署
+# deploy service and inference
+
+----
 
 
-              
----
-                    
+### 部署服務與使用服務
 
+- 部署服務時，一樣需要兩份 py 檔
+  1. 一個在`workspace`利用運算群組執行`predict_currency.py`
+  2. 另一個是`deploy_currency_prediction.py`，在本機執行，將預測的服務部署在`workspace`
 
-### 部署服務
+----
 
-`score_keras.py`
-```
+- 使用服務，也就是標題上所寫的 inference，這個詞直接查字典的話，意思是推論或推斷，可以想做，我們利用過去蒐集到的資料做成一個模型之後，利用此模型推論未來的情境。白話一點，其實就是把做好的模型拿來使用。服務部署完成後，會產生該服務的 API ，便可以透過 API 使用預測服務了。
+
+----
+
+### 示範程式
+
+- 用來執行預測服務的程式碼結構基本上是固定的，必須定義兩個 function：
+    - `init`：讀取模型。
+    - `run`：當使用者呼叫 API 時，執行預測，並回傳結果。
+
+----
+
+`predict_currency.py`
+```python
 import os
-import json
-import numpy as np
-from tensorflow.keras.models import load_model
-def init(): 
+from datetime import datetime, timedelta
+import pickle
+from keras.models import load_model
+import investpy
+
+
+def init():
+    """
+    Load the model
+    """
     global model
-# 從預設位置讀取模型
-    model_path = os.path.join(
-      os.getenv("AZUREML_MODEL_DIR"), "keras_lenet.h5")
+    global scaler
+    
+    # 模型的預設路徑就是 /var/azureml-app/azureml-models/，從中找到相對應的模型
+    for root, _, files in os.walk("/var/azureml-app/azureml-models/", topdown=False):
+        for name in files:
+            if name.split(".")[-1] == "h5":
+                model_path = os.path.join(root, name)
+            elif name.split(".")[-1] == "pickle":
+                scaler_path = os.path.join(root, name)
     model = load_model(model_path)
-def run(raw_data): 
-    data = json.loads(raw_data)["data"]
-    data = np.array(data).reshape((1, 28, 28, 1))
-    y_hat = model.predict(data)
-    return float(np.argmax(y_hat))
+    with open(scaler_path, "rb") as f_h:
+        scaler = pickle.load(f_h)
+    f_h.close()
+
+# 這邊的 raw_data 並沒有被使用到，因為資料可以直接透過 investpy 取得。
+# 但因為直接省略 raw_data ，是無法部署的，所以只好保留。
+def run(raw_data):
+    """
+    Prediction
+    """
+    
+    today = datetime.now()
+    data = investpy.get_currency_cross_historical_data(
+        "USD/TWD",
+        from_date=(today - timedelta(weeks=105)).strftime("%d/%m/%Y"),
+        to_date=today.strftime("%d/%m/%Y"),
+    )
+    data.reset_index(inplace=True)
+    data = data.tail(240).Close.values.reshape(-1, 1)
+    data = scaler.transform(data)
+    data = data.reshape((1, 240, 1))
+    ans = model.predict(data)
+    ans = scaler.inverse_transform(ans)
+    # 要注意回傳的數值必須要是 JSON 支援的資料格式
+    return float(ans[0][0])
 ```
+----
 
+- 部署服務時，需要考慮執行環境，如果沒有事先準備好現成的環境，服務部屬的時間會非常久，因為會從環境準備開始。
+- 需要指定模型，包含版本和名稱，這樣`predict_currency.py`才找得到相對應的模型。
 
-              
----
-                    
+----
 
-### 部署服務
-
-`deploy_service.py`
-
-```
+`deploy_currency_prediction.py`
+```python
+import os
 import numpy as np
-from azureml.core import Environment, Model, Workspace
-from azureml.core.conda_dependencies import CondaDependencies
+from azureml.core import Model, Workspace
+from azureml.core import Run
 from azureml.core.model import InferenceConfig
 from azureml.core.webservice import AciWebservice
+from azureml.core.authentication import InteractiveLoginAuthentication
 
-work_space = Workspace.from_config()
-# 設定服務環境
-environment = Environment("keras-service-environment")
-environment.python.conda_dependencies = \
-CondaDependencies.create(
-   python_version="3.7.7",
-   pip_packages=[
-     "azureml-defaults", "numpy", "tensorflow==2.3.1"])
 
+def main():
+    """
+    Deploy model to your service
+    """
+    # 為了之後 pipeline 的使用，所以使用兩種方式取得 workspace。
+    run = Run.get_context()
+    try:
+        work_space = run.experiment.workspace
+    except AttributeError:
+        interactive_auth = InteractiveLoginAuthentication(
+            tenant_id=os.getenv("TENANT_ID")
+        )
+        work_space = Workspace.from_config(auth=interactive_auth)
+    # 選擇之前已經建立好的環境
+    environment = work_space.environments["train_lstm"]
+    
+    # 選擇模型，如果不挑選版本，則會直接挑選最新模型
+    model = Model(work_space, "currency")
+    
+    # scaler 也是會用到
+    scaler = Model(work_space, name="scaler", version=1)
+    # 設定部署服務的 config
+    service_name = "currency-service"
+    inference_config = InferenceConfig(
+        entry_script="predict_currency.py", environment=environment
+    )
+    # 設定執行服務的資源
+    aci_config = AciWebservice.deploy_configuration(cpu_cores=1, memory_gb=1)
+    
+    # 部署服務
+    service = Model.deploy(
+        workspace=work_space,
+        name=service_name,
+        models=[model, scaler],
+        inference_config=inference_config,
+        deployment_config=aci_config,
+        overwrite=True,
+    )
+    service.wait_for_deployment(show_output=True)
+    print(service.get_logs())
+    # 印出服務連結，之後就是利用這個連結提供服務
+    print(service.scoring_uri)
+
+
+if __name__ == "__main__":
+    main()
 ```
 
+----
 
-              
----
-                    
+- 服務部署完成之後，可以到`workspace`的端點，檢視服務的相關資訊。
 
-### 部署服務
+![](media/ml_26.png)
 
-`deploy_service.py`
+----
 
-```
-model = Model(work_space, "keras_mnist")
-model_list = model.list(work_space)
-# 找出 Validation Accuracy 最高的模型
-validation_accuracy = []
-version = []
-for i in model_list:
-   validation_accuracy.append(
-     float(i.properties["val_accuracy"]))
-   version.append(i.version)
-model = Model(
-   work_space, "keras_mnist", 
-   version=version[np.argmax(validation_accuracy)]
-)
-```
+- 點進去剛剛產生的服務，可以看到 REST 端點，這其實就是服務連結，可以透過`POST`使用。 
 
+![](media/ml_27.png)
 
-              
----
-                    
+----
 
-### 部署服務
+- 接著，便可嘗試呼叫剛剛取得的服務連結來使用服務
 
-`deploy_service.py`
+`predict_currency_azml.py`
+```python
 
-```
-service_name = "keras-mnist-service"
-inference_config = InferenceConfig(
-    entry_script="score_keras.py", environment=environment
-)
-# 設定運算時需要的 CPU 和 記憶體
-aci_config = AciWebservice.deploy_configuration(
-  cpu_cores=1, memory_gb=1)
-```
-
-
-              
----
-                    
-### 部署服務
-`deploy_service.py`
-
-```
-# 部署服務
-service = Model.deploy(
-    workspace=work_space,
-    name=service_name,
-    models=[model],
-    inference_config=inference_config,
-    deployment_config=aci_config,
-    overwrite=True,)
-service.wait_for_deployment(show_output=True)
-print(service.get_logs()) # 部署失敗的話，可以檢查 log
-print(work_space.webservices) # 確認已部署服務
- ```
-
-              
----
-                    
-
-### 使用預測服務
-
-
-`predict_mnist_azml.py`
-```
 import argparse
-import gzip
 import json
-import os
 import requests
-import numpy as np
-from PIL import Image
-args = parse_args()
-# 讀取 MNIST test images
-test_image = load_image(os.path.join(
-  args.data_folder, "t10k-images-idx3-ubyte.gz"))
-test_image /= 255
-# 隨機挑選一張圖
-testing_num = np.random.randint(
-  low=0, high=len(test_image) - 1)
+
+
+def parse_args():
+    """
+    Parse arguments
+    """
+    parser = argparse.ArgumentParser()
+    # endpoint url 就是 API 的連結
+    parser.add_argument("-e", "--endpoint_url", type=str, help="Endpoint url")
+    args = parser.parse_args()
+    return args
+
+
+def main():
+    """
+    Predict mnist data with Azure machine learning
+    """
+    args = parse_args()
+    data = {"data": ""}
+    # 將資料轉換成 JSON 
+    input_data = json.dumps(data)
+    # Set the content type
+    headers = {"Content-Type": "application/json"}
+
+    # 使用 POST 呼叫 API
+    resp = requests.post(args.endpoint_url, input_data, headers=headers)
+
+    print("The answer is {}".format(resp.text))
+
+
+if __name__ == "__main__":
+    main()
 ```
+----
 
+直接在 terminal 執行 
 
-              
----
-                    
-### 使用預測服務
-
-`predict_mnist_azml.py`
+```bash
+python3.7 predict_currency_azml.py -e 你的 API 連結
 ```
-# 轉換浮點數成 JSON 字串
-data = {"data": test_image[testing_num].tolist()}
-input_data = json.dumps(data)
-# Set the content type
-headers = {"Content-Type": "application/json"}
-# 透過 POST 訪問之前部署的服務
-resp = requests.post(
-  args.endpoint_url, input_data, headers=headers)
-ans = resp.text.replace("[", "").replace("]", "").split(", ")
-ans = int(float(ans[0]))
-print("The answer is {}".format(ans))
-array = np.reshape(test_image[testing_num] * 255, (28, 28))
-img = Image.fromarray(array)
-img.show()
-```
-
-
-              
----
-                    
-
-### 使用預測服務
-
-`predict_mnist_azml.py`
-```
-# 如果要存成圖檔，必須先轉成 RGB 格式
-img = img.convert("RGB")
-img.save("output.png")
-
-```
-
-![](media/ml_7.png)
-![](media/ml_6.png)
+就會得到預測結果了。
 
 ---
+
 
 ## 參考資料
 - Azure Machine Learning documentation: https://tinyurl.com/yxzjslm5
