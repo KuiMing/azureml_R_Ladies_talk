@@ -1,17 +1,16 @@
-# Azure Machine Learning
+# Azure Machine Learning的眉角
 
 ---
 
-## Azure 帳號申請
+## Azure 帳號申請- 免費試用 30 天
 
-1. 進入https://login.microsoftonline.com/
-2. 可以用 outlook 、 hotmail或其他email建立帳戶
-3. 驗證email及真人身份
-4. 進入https://azure.microsoft.com/
-5. 按下*開始免費使用*
-6. 填妥信用卡資訊
-   - 免費使用階段不扣款，主動升級才會扣款
-   - 一開始可免費使用30天，並有大約6100台幣的credit
+- 來這邊註冊：https://login.microsoftonline.com/
+- 需要信用卡資訊
+  - 免費使用階段不扣款，主動升級才會扣款
+  - 一開始可免費使用30天，並有大約 6100 台幣的 credit
+- 曾經遇過的地雷
+  - 台XX星的門號收不到簡訊
+  - 信用卡持卡人姓名有誤
 
 
 ----
@@ -34,7 +33,7 @@ curl -sL https://packages.microsoft.com/keys/microsoft.asc |
     gpg --dearmor |
     sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
 ```
----~
+----
 
 - 在 Ubuntu 上安裝 Azure CLI
 
@@ -66,15 +65,10 @@ az login
 ---
 
 # Azure machine learning
-
-
-
-              
----
+  
+----
                     
-
 ## Azure machine learning
-
 
 - 建立工作區 
 - 建立運算群組 
@@ -85,15 +79,23 @@ az login
 - 部署服務
 - 使用預測服務
 
+----
 
-              
+![](media/ml_32.png)
+
+
+----
+
+## MLOps
+
+![](media/ml_33.png)
+
 ----
                     
 
-### 確認 Subscription ID 
-#### (訂用帳戶 ID)
+### 事前準備
 
-執行以下指令，取得 ID 和 Tenant ID
+- 執行以下指令，取得 Subscription ID 和 Tenant ID
 ```
 az account list
 ```
@@ -102,18 +104,27 @@ az account list
 
 
               
+---
+
+## Work Space
+
 ----
                     
 
-### 建立工作區 
+## 建立工作區 
 
 `create_workspace.py`
-```python
+```python [6|8-15|19]
+import os
 from azureml.core import Workspace
+from azureml.core.authentication import InteractiveLoginAuthentication
+
+# 以 Tenant ID 取得權限
+interactive_auth = InteractiveLoginAuthentication(tenant_id=os.getenv("TENANT_ID"))
 
 work_space = Workspace.create(
     name="mltibame",  # 工作區名稱
-    subscription_id="Your subscription ID",  
+    subscription_id="Your subscription key",  
     resource_group="Tibame",  # 資源群組名稱
     create_resource_group=True,
     location="eastus2",  
@@ -130,38 +141,41 @@ work_space.write_config(path=".azureml")
               
 ----
                     
-### 建立工作區 
+## 建立工作區 
 
 
 <img src='media/ml_2.png' width=200%></img>
 
-              
 ----
+
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_34.png" -->
+
+- 到 https://portal.azure.com/#home ，進入機器學習資源的頁面。
+- 啟動工作室。
+
+
+
+---
+
+## Compute Target
                     
+----
 
-### 建立運算群組
-
+## 建立運算群組
 
 `create_compute.py`
-```python
+```python [19-20]
+import os
 from azureml.core import Workspace
 from azureml.core.compute import ComputeTarget, AmlCompute
 from azureml.core.compute_target import ComputeTargetException
+from azureml.core.authentication import InteractiveLoginAuthentication
 
 # 建立工作區後，可以從 .azureml/config.json 讀取工作區資訊
-work_space = Workspace.from_config()
-```
-
-
-              
-----
-                    
-
-### 建立運算群組
-
-`create_compute.py`
-```python
-# 確認運算群組是否存在，否則直接建立運算群組
+interactive_auth = InteractiveLoginAuthentication(tenant_id=os.getenv("TENANT_ID"))
+work_space = Workspace.from_config(auth=interactive_auth)
+# 確認計算叢集是否存在，否則直接建立計算叢集
+# 建立計算叢集之後，可以直接用計算叢集的名稱指定執行實驗時的計算叢集
 cpu_cluster_name = "cpu-cluster"
 try:
     cpu_cluster = ComputeTarget(
@@ -177,16 +191,21 @@ except ComputeTargetException:
 cpu_cluster.wait_for_completion(show_output=True)
 ```
 
+
 ----
 
-在`workspace`的頁面左側，可以找到`計算`，點進去之後可以看到剛剛建立的計算叢集。
+計算叢集
 
 
-![](media/ml_10.png)
 
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_34.png" -->
 
 ---
-                    
+
+## Simple Experiment
+
+----
+       
 
 ### 簡易測試
 `hello.py`
@@ -205,22 +224,37 @@ print("Hello, Azure!")
 ### 簡易測試
 
 `run_experiment.py`
-```python
-from azureml.core import (
-  Workspace, Experiment, ScriptRunConfig)
-work_space = Workspace.from_config()
-# 建立實驗
-experiment = Experiment(
-  workspace=work_space, name="hello-experiment")
-config = ScriptRunConfig(
-    source_directory=".",  # code放在哪個資料夾
-    script="hello.py",  # 要上傳的code
-    compute_target="cpu-cluster"
-)
-run = experiment.submit(config)
-aml_url = run.get_portal_url()
-print(aml_url) # 此連結可以看到 log
-run.wait_for_completion(show_output=True) # 過程中的紀錄都會列出
+```python [10-13|15|17-21|23|26]
+import os
+from azureml.core import Workspace, Experiment, ScriptRunConfig
+from azureml.core.authentication import InteractiveLoginAuthentication
+
+
+def main():
+    """
+    Hello on Azure machine learning.
+    """
+    # 只要在本機端要求 workspace 做事
+    # 以下兩行就一定要執行
+    interactive_auth = InteractiveLoginAuthentication(tenant_id=os.getenv("TENANT_ID"))
+    work_space = Workspace.from_config(auth=interactive_auth)
+    # 建立實驗
+    experiment = Experiment(workspace=work_space, name="hello-experiment")
+    # 設定 config
+    config = ScriptRunConfig(
+        source_directory=".", # code放在哪個資料夾
+        script="hello.py", # 要上傳的code
+        compute_target="cpu-cluster" # 指定計算叢集
+    )
+    # 讓實驗依照 config 執行
+    run = experiment.submit(config)
+    aml_url = run.get_portal_url()
+    print(aml_url)# 此連結可以看到 log
+    run.wait_for_completion(show_output=True)# 過程中的紀錄都會列出
+
+
+if __name__ == "__main__":
+    main()
 ```
 
 
@@ -236,19 +270,39 @@ python3.7 run_experiment.py
 ----
 
 執行之後，程式碼會把程式碼上傳執行。執行的時間大概要十幾分鐘左右，這時候你會想，為什麼要這麼久？因為......
-- Azure 會從 build docker image 開始，build 完，然後再推到 Azure Container Registry- ACR 存放，這一步應該就是最花時間的步驟了。到`workspace`，進入`實驗`（下圖中，左側 ***燒杯*** 圖示）中查看`輸出 + 紀錄檔`，可以看到`20_image_build_log.txt`，這檔案紀錄上述過程。![](media/ml_11.png)
 
 ----
 
-- 接著，會把 dcoker image 拉到虛擬機器中展開成 container（記錄在`55_azureml-excution-tvmp_xxxxx.txt`）。![](media/ml_12.png)
+### 最花時間的步驟
+- Azure 會從 build docker image 開始。
+- build 完，然後再推到 Azure Container Registry- ACR 存放。
+- 到`workspace`，進入`實驗`（下圖中，左側 ***燒杯*** 圖示）中查看`輸出 + 紀錄檔`，可以看到`20_image_build_log.txt`，這檔案紀錄上述過程。
 
 ----
 
-- 然後，把需要執行的程式碼放入 container 之中（記錄在`65_jobp_prep-tvmp_xxxxx.txt`）。![](media/ml_13.png)
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_11.png" -->
+
 
 ----
 
-- 終於可以執行`print("Hello Azure!")`了。如果上傳的程式碼出錯，也可以從這裡的紀錄發現錯誤訊息。通常會出問題的地方，多半是在使用者想要執行的程式碼上，所以可以透過觀察 `70_driver_log.txt` 發現問題所在。![](media/ml_14.png)
+
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_12.png" -->
+- 接著，會把 dcoker image 拉到虛擬機器中展開成 container（記錄在`55_azureml-excution-tvmp_xxxxx.txt`）。
+
+
+----
+
+
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_13.png" -->
+- 然後，把需要執行的程式碼放入 container 之中（記錄在`65_jobp_prep-tvmp_xxxxx.txt`）。
+
+----
+
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_14.png" -->
+
+- 終於可以執行 print("Hello Azure!")了。<!-- .element: class="fragment" data-fragment-index="1" -->
+- 如果上傳的程式碼出錯，也可以從 70_driver_log.txt 的紀錄發現錯誤訊息。<!-- .element: class="fragment" data-fragment-index="2" -->
+
 
 ----
 
@@ -259,7 +313,13 @@ python3.7 run_experiment.py
 
 ## Upload data
 
-要做匯率的預測模型，就必須準備匯率的歷史資料，我想[investing.com](https://investing.com)是不錯的資料來源，資料的歷史夠久，涵蓋各個國家的各項金融商品：債券、憑證、期貨、指數和股票，應有盡有（但沒有臺灣指數期貨QQ）。也有`Python`套件可以使用，套件也會隨著 investing.com 更新。取得歷史資料後，經過 normalization 後，就可以將資料上傳到`datastore` ，以便後續在`workspace`訓練模型時使用。
+----
+
+## 以台幣-美金匯率為例
+
+- [investing.com](https://investing.com)
+- 債券、憑證、期貨、指數和股票，應有盡有
+- 有`Python`套件可以使用
 
 ----
 
@@ -272,9 +332,9 @@ pip3.7 install scikit-learn
 
 ----
 
-### 示範程式
+### 準備匯率資料
 
-```python
+```python [12-18|22]
 from datetime import datetime
 import os
 import pickle
@@ -286,8 +346,9 @@ from sklearn.preprocessing import MinMaxScaler
 if not os.path.isdir("currency"):
     os.system("mkdir currency")
 
-# 從 investing.com 取得臺幣與美金的歷史匯率，取得每天的開盤價、最高價、最低價和收盤價
-# 由於不知道資料從何時開始，我們先設定一個夠古老的日期，西元1900年01月01日開始
+# 從 investing.com 取得臺幣與美金的歷史匯率
+# 取得每天的開盤價、最高價、最低價和收盤價
+# 設定一個夠古老的日期，西元1900年01月01日開始
 usd_twd = investpy.get_currency_cross_historical_data(
     "USD/TWD",
     from_date="01/01/1900", 
@@ -317,7 +378,7 @@ currency_data.to_csv("currency/training_data.csv")
 
 `upload_file.py`
 
-```python
+```python [36-40|42-43]
 """
 Upload data to Azure machine learning
 """
@@ -371,13 +432,17 @@ if __name__ == "__main__":
 
 取得匯率資料，也準備好`upload_file.py`，就可以直接在 terminal 執行，上傳資料
 ```bash
-python3.7 upload_file.py --folder currency --target_path currency --dataname currency
+python3.7 upload_file.py \
+--folder currency \
+--target_path currency \
+--dataname currency
 ```
 
 ----
+
 從相對路徑`currency`，上傳到 datastore 的`currency`資料夾，註冊資料集的名稱也為 currency。
 
-![](media/ml_16.png)
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_14.png" -->
 
 ----
 
@@ -386,16 +451,22 @@ python3.7 upload_file.py --folder currency --target_path currency --dataname cur
 
 
 ---
-## Set Environment
 
-之前，試著在`workspace`執行`print("Hello World")`時，會發現整體的執行時間非常長，主要是因為 Azure 需要準備 docker image 。但事實上，我們可以事先準備好環境，後續只會在第一次執行實驗時，需要建立 docker image ，之後每次執行實驗，只要選擇已經註冊好的環境，就可以省掉建立 docker image 的步驟了，大幅節省時間。
+## Environment
+
+----
+
+## 為了大幅節省時間
+
+- 事先準備好環境
+- 只會在第一次執行實驗時，建立 docker image
 
 ----
 
 ### 設定環境
 
 `create_environment.py`
-```python
+```python [16-23]
 """
 Create and register the environment
 """
@@ -428,11 +499,8 @@ if __name__ == "__main__":
 
 ----
 
-## 鎖定套件版本
+### 鎖定套件版本
 
-為了讓訓練模型、收集數據和最後部署服務的環境都想同，列出所有需要用到的套件。另外，為了避免本地端使用的套件版本與`workspace`中有所差異，可以考慮直接鎖定版本。尤其是 keras 和 tensorflow ，版本有所差異，可能會讓部分語法有所不同，使得在執行實驗時發生各種錯誤。（謎之聲：懶得使用最新版的代價。）
-
-----
 
 `requirements.txt`
 ```
@@ -465,15 +533,15 @@ environment = work_space.environments["train_lstm"]
 
 ----
 
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_19.png" -->
 
-- 另外，也可以看到 Azure 準備好的環境
+## Curated Environment
 
-![](media/ml_19.png)
-
+Azure 預設環境
 
 ----
 
-- 針對 Azure 準備好的策劃環境（Curated Environment），可以根據環境的名稱取用，例如：
+## Curated Environment
 
 ```python
 from azureml.core import Workspace, Environment
@@ -487,7 +555,7 @@ env = Environment.get(workspace=work_space, name="AzureML-tensorflow-2.4-ubuntu1
 
 ----
 
-### 用 docker image 設定環境
+## docker image
 
 
 - 也可以直接拿現成的 docker image 作為實驗的環境，這樣也可以事先在本地端測試，確保環境沒有問題。
@@ -513,8 +581,9 @@ environment.docker.base_image = "mcr.microsoft.com/azureml/intelmpi2018.3-ubuntu
 
 ----
 
-依照之前的介紹，在`workspace`執行實驗訓練模型時，也需要兩個`Python` script：
-  1. 一個要在`workspace`利用計算叢集執行的程式碼：`train_lstm.py`，其主要任務為訓練模型，應該考慮的步驟如下：
+## 在`workspace`訓練模型
+
+  1. 在`workspace`利用計算叢集執行的程式碼：`train_lstm.py`，其主要任務為訓練模型，應該考慮的步驟如下：
       - 取得資料
       - 整理資料
       - 建構模型
@@ -523,9 +592,14 @@ environment.docker.base_image = "mcr.microsoft.com/azureml/intelmpi2018.3-ubuntu
 
 ----
 
-  2. 另一個 script `run_experiment_training.py` 在本機執行，把`train_lstm.py`上傳，並且通知`workspace`開始執行`train_lstm.py`。除了呼叫`train_lstm.py`來訓練模型之外，最後也會註冊訓練完的模型。
+## 在`workspace`訓練模型
 
-另外，這邊額外介紹一個功能，Azure machine learning 也可以將訓練過程中的各項觀察數值（例如：`loss`），利用`tensorboard`觀察。
+  2.  `run_experiment_training.py` 在本機執行
+      - 上傳`train_lstm.py`
+      - 通知`workspace`開始執行`train_lstm.py`
+      - 註冊模型
+      - 利用`tensorboard`觀察訓練過程中的各項數值
+
 
 ----
 
@@ -538,17 +612,12 @@ pip3.7 install azureml-tensorboard
 
 ----
 
-### `workspace`的環境設定
 
-請參考[Azure machine learning: set environment- 準備一個大家都能用的環境](https://ithelp.ithome.com.tw/articles/10269544)，如果環境沒有設定好，一定會遇到一連串的錯誤訊息，在此提醒各位。
-
-----
-
-### 示範程式
+### 在 `workspce` 執行
 
 
 `train_lstm.py`
-```python
+```python [62|81|104-109|113]
 import argparse
 import os
 import pickle
@@ -678,10 +747,10 @@ if __name__ == "__main__":
 
 ----
 
+### 在本機執行
 
 `run_experiment_training.py`
-```python
-
+```python [36,38|42|53,54,57]
 import os
 import argparse
 from azureml.core import ScriptRunConfig, Dataset, Workspace, Experiment
@@ -795,8 +864,7 @@ if __name__ == "__main__":
 ```bash
 python3.7 run_experiment_training.py --file train_lstm.py --target_folder currency
 ```
-
-執行上述指令後，整個流程大約需要 15 分鐘，一開始可以考慮把 epochs 設定成 100 或更少，確認整個流程沒有問題，再把 epochs 放大。實驗執行沒多久，就會從瀏覽器開啟 tensorboard ，但不會馬上就有圖表，因為還需要設定環境，需要等一下。Tensorboard 出現的圖表，即是訓練過程中的`loss`隨著訓練的變化。另外，也可以看到訓練模型的結構。
+整個流程大約需要 15 分鐘
 
 ----
 
@@ -819,78 +887,32 @@ python3.7 run_experiment_training.py --file train_lstm.py --target_folder curren
 
 ----
 
-這邊有一些實驗的限制，[可供參考](https://docs.microsoft.com/en-us/azure/machine-learning/resource-limits-quotas-capacity)。
 
-終於完成一次模型訓練了，這一步因為`keras`和`tensorflow`的版本相容性問題，讓我踩了幾次雷（謎之音：因為太久沒更新了，不知道外面的世界長怎樣......）。在實驗過程中，會出現的問題，多半都是跟上傳上去的程式碼有關，最常出現的錯誤，大概有三種：套件、路徑和寫錯字。出錯之後，到`workspace`上觀察一下紀錄（`70_drive_log.txt`），多半都能看出端倪。
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_24.png" -->
 
-
-----
-
-![](media/ml_23.png)
-
+除了在`workspace`上使用模型外，也能下載下來使用。
 
 ----
 
-從`workspace`上也可以看到註冊過的模型。點選進去每個模型，也能下載下來使用。
-![](media/ml_24.png)
-
-----
-
-提供以下程式碼，視覺化預測結果。比較一下 2020 ～ 2021 年的真實匯率與預測結果。
-```python
-from plotly.offline import iplot, plot, init_notebook_mode
-import plotly.graph_objects as go
-init_notebook_mode(connected=True)
-
-USD_TWD = investpy.get_currency_cross_historical_data('USD/TWD', from_date='01/01/1900', to_date='01/09/2021')
-USD_TWD.reset_index(inplace=True)
-data = USD_TWD.Close.values.reshape(-1, 1)
-data = scaler.transform(data)
-data_len = 240
-generator = TimeseriesGenerator(data=data, targets=range(data.shape[0]), length=data_len, batch_size=1, stride=1)
-X = []
-for i in generator:
-    X.append(i[0][0])
-X = np.array(X)
-Y = data[range(data_len, len(X) + data_len)]
-prediction = model.predict(X)
-prediction = scaler.inverse_transform(prediction)
-Y = scaler.inverse_transform(Y)
-date = USD_TWD.Date.values[range(data_len, len(X) + data_len)]
-date = [str(i)[:10] for i in date]
-result = pd.DataFrame(dict(date=date, real=Y.flatten(), prediction=prediction.flatten()))
-result = result[result.date >= '2020']
-
-fig = [
-    go.Scatter(x=result.date, y=result.prediction, name='Real'),
-    go.Scatter(x=result.date, y=result.real, name='Prediction'),]
-iplot(fig, filename='test')
-```
-----
-
-看起來大致上趨勢相同，整體上亦步亦趨。
+## 訓練效果
 ![](media/ml_25.png)
               
 ---
 
-# deploy service and inference
+## deploy service and inference
 
 ----
 
 
-### 部署服務與使用服務
+### 部署服務
 
 - 部署服務時，一樣需要兩份 py 檔
-  1. 一個在`workspace`利用運算群組執行`predict_currency.py`
-  2. 另一個是`deploy_currency_prediction.py`，在本機執行，將預測的服務部署在`workspace`
+  1. 一個在`workspace`利用運算群組執行預測服務
+  2. 另一個是在本機執行，將預測的服務部署在`workspace`
 
 ----
 
-- 使用服務，也就是標題上所寫的 inference，這個詞直接查字典的話，意思是推論或推斷，可以想做，我們利用過去蒐集到的資料做成一個模型之後，利用此模型推論未來的情境。白話一點，其實就是把做好的模型拿來使用。服務部署完成後，會產生該服務的 API ，便可以透過 API 使用預測服務了。
-
-----
-
-### 示範程式
+### 部署服務
 
 - 用來執行預測服務的程式碼結構基本上是固定的，必須定義兩個 function：
     - `init`：讀取模型。
@@ -898,8 +920,10 @@ iplot(fig, filename='test')
 
 ----
 
+### 在 `workspace` 執行
+
 `predict_currency.py`
-```python
+```python [8,15-16|23|30|45|47]
 import os
 from datetime import datetime, timedelta
 import pickle
@@ -915,6 +939,7 @@ def init():
     global scaler
     
     # 模型的預設路徑就是 /var/azureml-app/azureml-models/，從中找到相對應的模型
+    # 也可以從環境變數 `AZUREML_MODEL_DIR` 取得路徑
     for root, _, files in os.walk("/var/azureml-app/azureml-models/", topdown=False):
         for name in files:
             if name.split(".")[-1] == "h5":
@@ -950,10 +975,13 @@ def run(raw_data):
 ```
 ----
 
+### 注意事項
 - 部署服務時，需要考慮執行環境，如果沒有事先準備好現成的環境，服務部屬的時間會非常久，因為會從環境準備開始。
-- 需要指定模型，包含版本和名稱，這樣`predict_currency.py`才找得到相對應的模型。
+- 需要指定模型，包含版本和名稱，這樣 `workspace` 才找得到相對應的模型。
 
 ----
+
+### 在本機執行
 
 `deploy_currency_prediction.py`
 ```python
@@ -1016,22 +1044,27 @@ if __name__ == "__main__":
 
 ----
 
+
+
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_26.png" -->
+
 - 服務部署完成之後，可以到`workspace`的端點，檢視服務的相關資訊。
 
-![](media/ml_26.png)
 
 ----
 
+
+
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_27.png" -->
 - 點進去剛剛產生的服務，可以看到 REST 端點，這其實就是服務連結，可以透過`POST`使用。 
 
-![](media/ml_27.png)
 
 ----
 
-- 接著，便可嘗試呼叫剛剛取得的服務連結來使用服務
+- 使用服務
 
 `predict_currency_azml.py`
-```python
+```python [30]
 
 import argparse
 import json
@@ -1071,12 +1104,7 @@ if __name__ == "__main__":
 ```
 ----
 
-直接在 terminal 執行 
-
-```bash
-python3.7 predict_currency_azml.py -e 你的 API 連結
-```
-就會得到預測結果了。
+<img src=media/ml_35.PNG width=40%></img>
 
 ---
 
@@ -1084,21 +1112,19 @@ python3.7 predict_currency_azml.py -e 你的 API 連結
 
 ----
 
+## Pipeline
 
-- `Pipeline`，流水線或管線，顧名思義，就是讓程式碼，按照使用者安排的順序一一執行，Azure machine learning 也有提供這樣的服務，所以我們可以把前面幾篇文章所做的事情，全部交給流水線執行。第一件事情，要先解決資料更新的問題，取得最新資料，並且將其存進 datastore，然後註冊這份資料。在此，我們繼續以匯率為例，來示範如何用`pipeline`更新資料。
-
-----
-
-- 執行`pipeline`一樣至少需要兩份以上的 py 檔，將需要執行的任務，分別寫成不同的 py 檔，然後再整合在一起交由`pipeline`執行。
-- `get_currency.py`：之前在上傳資料時介紹過，這次要以維護資料的角度改寫。
-- `run_pipeline_data.py`：在本地端執行，便可把`get_currency.py`上傳到`workspace`執行。
+- 讓程式碼，按照使用者安排的順序執行
+- 執行`pipeline`一樣至少需要兩份以上的 py 檔
+  - 在`workspace`定期執行的程式碼
+  - 在本地端執行，把上述的程式碼上傳到`workspace`
 
 ----
 
-### 示範程式
+### 在`workspace`執行的 code
 
 `get_currency.py`
-```python
+```python [61-64|65-67]
 import argparse
 from datetime import datetime
 import os
@@ -1160,6 +1186,7 @@ def main():
         )
         
         # 接著就必須要註冊資料，資料才會真的更新。
+        # 註冊必須取得 workspace 的權限
         run = Run.get_context()
         work_space = run.experiment.workspace
         datastore = work_space.get_default_datastore()
@@ -1173,12 +1200,18 @@ if __name__ == "__main__":
 
 ----
 
-要注意的是，雖然在這邊要做的事情是，讀取就資料，合併新資料後，更新資料。但是，輸入的資料夾路徑和輸出的資料夾路徑不能為同一個路徑，否則就會得到錯誤訊息：***Graph shouldn't have cycles***。可以利用`OutputFileDatasetConfig`這個`class`解決這個問題，讓資料先暫存，之後再推向 datastore。
+## 我踩過的雷
+
+- Error!!!: ***Graph shouldn't have cycles***
+  - 輸入的資料夾路徑和輸出的資料夾路徑不能為同一個路徑
+  - 讓資料先暫存，之後再推向 datastore
 
 ----
 
+## 在本地端執行的 code
+
 `run_pipeline_data.py`
-```python
+```python [15-20|21-26|28,30|33,36,41,43|47-51|53-58]
 import os
 from azureml.data import OutputFileDatasetConfig
 from azureml.pipeline.steps import PythonScriptStep
@@ -1225,7 +1258,7 @@ def main():
         ],
         allow_reuse=True,
     )
-    # pipeline 的本質還是實驗，所以需要建立實驗，在把 pipeline帶入
+    # pipeline 的本質還是實驗，所以需要建立實驗，再把 pipeline帶入
     experiment = Experiment(work_space, "get_currency")
 
     pipeline = Pipeline(workspace=work_space, steps=[get_currency])
@@ -1262,12 +1295,19 @@ if __name__ == "__main__":
 
 ----
 
-### 示範程式
+## 更新 Model
 
-`train_lstm.py`之前介紹過，這邊為了使用`pipeline`執行，也考慮後續重複使用的情況，這邊再稍微改造一下。下面針對新增的內容解釋：
+- 選擇效果最好的模型
+  - 訓練
+  - 註冊
+
+----
+
+## 更新 Model
+
 
 `train_lstm.py`
-```python
+```python [57-64|143-146|163-168|174-183]
 import argparse
 import os
 import pickle
@@ -1325,7 +1365,8 @@ def load_best_model(work_space, model_name, x_val, y_val):
     load the best model from registered models
     """
     model_obj = Model(work_space, model_name)
-    # 取得模型清單，擷取最近五個版本。除了版本 version 以外，屬性 properties 也是可以作為選擇模型的依據
+    # 取得模型清單，擷取最近五個版本。除了版本 version 以外，
+    # 屬性 properties 也是可以作為選擇模型的依據
     model_list = model_obj.list(work_space, name=model_name)
     version = [i.version for i in model_list]
     version.sort(reverse=True)
@@ -1363,6 +1404,8 @@ def main():
     data = scaler.transform(data)
     data_len = 240
     x_train, y_train, x_val, y_val = data_generator(data, data_len)
+    loss_threshold = 1
+    version = 0
     # 單純執行實驗時，需要先定義模型架構，並且使用tensorboard
     if args.experiment:
         model = Sequential()
@@ -1384,12 +1427,18 @@ def main():
     else:
         # 取得`workspace`權限
         work_space = run.experiment.workspace
-        model = load_best_model(work_space, model_name="currency", key="val_loss")
+        model, loss_threshold, version = \
+            load_best_model(work_space,
+                            model_name="currency",
+                            x_val=x_val,
+                            y_val=y_val)
+        origin_model = model
         print("Load Model")
         # 如果 val_loss 進步太慢，就結束訓練
-        callback = EarlyStopping(
-            monitor="val_loss", mode="min", min_delta=1e-8, patience=50
-        )
+        callback = EarlyStopping(monitor="val_loss",
+                                 mode="min",
+                                 min_delta=1e-8,
+                                 patience=50)
     # train the network
     history_callback = model.fit(
         x_train,
@@ -1452,14 +1501,10 @@ if __name__ == "__main__":
 
 ----
 
-在訓練之後，選擇當下最佳的模型註冊，這樣在部署服務時，就可以直接使用最新版的模型部署服務。
-`deploy_currency_prediction`的內容不變，只是在執行`pipeline`時，`workspace`的權限也是必須靠`Run`取得。
+## 利用`pipeline`部署
 
-
-----
-
-`deploy_currency_prediction`
-```python
+`deploy_currency_prediction.py`
+```python [15-22]
 
 import os
 import numpy as np
@@ -1511,10 +1556,11 @@ if __name__ == "__main__":
 
 
 ----
-跟之前上一篇的`run_pipeline_data.py`比較起來，這邊會再新增兩個流程到`pipeline`之中，分別是為了模型訓練和服務部署。
+
+## 執行`pipeline`
 
 `run_pipeline.py`
-```python
+```python [25-39|40-49|50-58|61|64-69]
 import os
 from azureml.data import OutputFileDatasetConfig
 from azureml.pipeline.steps import PythonScriptStep
@@ -1606,8 +1652,8 @@ if __name__ == "__main__":
 
 ----
 
-### 示範程式
-```python
+### 安排 Schedule
+```python [13-17|18-28|29-36]
 import os
 from azureml.core import Workspace
 from azureml.core.authentication import InteractiveLoginAuthentication
@@ -1627,7 +1673,9 @@ def main():
     )
     # 排程的時候，要注意時區，才能確保在正確的時間執行
     recurrence = ScheduleRecurrence(
-        frequency="Week", # 觸發排程頻率的時間單位，可以是 "Minute"、"Hour"、"Day"、"Week" 或 "Month"。
+        # 觸發排程頻率的時間單位，
+        # 可以是 "Minute"、"Hour"、"Day"、"Week" 或 "Month"。
+        frequency="Week", 
         interval=1, # 間隔多少時間單位觸發
         start_time="2021-07-21T07:00:00", 
         time_zone=TimeZone.TaipeiStandardTime,
@@ -1650,7 +1698,8 @@ if __name__ == "__main__":
 
 ----
 
-執行`python3.7 create_schedule.py`之後，其實無法從`workspace`看到排程的相關資訊，不過可以透過以下做法得知目前所有排程
+## 確認排成相關資訊
+
 
 ```python
 import os
@@ -1673,9 +1722,10 @@ print(sche_list)
 
 ----
 
-這樣就能看到排程的資訊，其中也包含了詳細的執行頻率與時間，例如：每週日早上六點執行一次。
+## 刪除`schedule`和`pipeline`
 
-另外，如果管線已安排排程，那就必須把`schedule`刪掉，才能刪除`pipeline`。以上述情況為例：
+- 先把`schedule`刪掉
+- 才能刪除`pipeline`
 
 ```python
 
@@ -1685,14 +1735,16 @@ pipe_list = PublishedPipeline.list(work_space)
 pipe = next(p_l.id for p_l in pipe_list if p_l.name == "pipeline_data_train_deploy")
 pipe.disable()
 ```
-一開始比較不熟悉，應該會很常刪掉管線和排程，重複實驗，所以提供大家參考。
-
 
 ---
 
 ## 參考資料
 - Azure Machine Learning documentation: https://tinyurl.com/yxzjslm5
-  - Jupyter Notebook: https://tinyurl.com/r934vbp
-  - Automated ML: https://tinyurl.com/y4koj4f2
-  - Model Management: https://tinyurl.com/tf8w7cn
+- Azure API: https://docs.microsoft.com/zh-tw/python/api/
+- Azure sample code: https://github.com/Azure-Samples/
+- My code: https://github.com/KuiMing/triathlon_azure
+- 鐵人賽: https://ithelp.ithome.com.tw/users/20139923/articles 
 
+---
+
+# Thank you!
