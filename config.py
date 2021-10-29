@@ -7,11 +7,11 @@ with the default options.
 
 REVEAL_META = {
     # Title of the slide
-    "title": "The title",
+    "title": "Azureml",
     # Author in the metadata of the slide
-    "author": "Some Author",
+    "author": "Benjamin Chen",
     # Description in the metadata of the slide
-    "description": "Some description",
+    "description": "Azure machine learning for R Lady",
 }
 
 # Reveal markdown slide separator
