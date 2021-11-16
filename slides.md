@@ -5,6 +5,7 @@
 ## Azure 帳號申請- 免費試用 30 天
 
 - 來這邊註冊：https://login.microsoftonline.com/
+- 電話號碼才是本體！
 - 需要信用卡資訊
   - 免費使用階段不扣款，主動升級才會扣款
   - 一開始可免費使用30天，並有大約 6100 台幣的 credit
@@ -20,7 +21,15 @@
 
 - 官方文件：
   - https://docs.microsoft.com/zh-tw/cli/azure/install-azure-cli
-- 在 Ubuntu 上安裝 Azure CLI
+- Mac
+```
+brew update && brew install azure-cli
+```
+
+----
+## Azure CLI 安裝
+
+- Ubuntu
 
 ```bash
 # 更新並安裝必要的套件
@@ -35,7 +44,7 @@ curl -sL https://packages.microsoft.com/keys/microsoft.asc |
 ```
 ----
 
-- 在 Ubuntu 上安裝 Azure CLI
+- Ubuntu
 
 ```bash
 
@@ -78,6 +87,8 @@ az login
   - 註冊模型
 - 部署服務
 - 使用預測服務
+- Pipeline
+- 排程
 
 ----
 
@@ -153,7 +164,10 @@ work_space.write_config(path=".azureml")
 - 到 https://portal.azure.com/#home ，進入機器學習資源的頁面。
 - 啟動工作室。
 
+----
 
+# Workspace
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_36.png" -->
 
 ---
 
@@ -191,14 +205,14 @@ except ComputeTargetException:
 cpu_cluster.wait_for_completion(show_output=True)
 ```
 
+[VM size](https://azure.microsoft.com/zh-tw/pricing/details/virtual-machines/ubuntu-advantage-standard/)
 
 ----
 
 計算叢集
 
 
-
-<!-- .slide: data-background-color="#ffffff" data-background="media/ml_34.png" -->
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_10.png" -->
 
 ---
 
@@ -378,7 +392,7 @@ currency_data.to_csv("currency/training_data.csv")
 
 `upload_file.py`
 
-```python [36-40|42-43]
+```python [35-40|42-43]
 """
 Upload data to Azure machine learning
 """
@@ -439,10 +453,12 @@ python3.7 upload_file.py \
 ```
 
 ----
+<br>
+<br>
 
 從相對路徑`currency`，上傳到 datastore 的`currency`資料夾，註冊資料集的名稱也為 currency。
 
-<!-- .slide: data-background-color="#ffffff" data-background="media/ml_14.png" -->
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_16.png" -->
 
 ----
 
@@ -617,7 +633,7 @@ pip3.7 install azureml-tensorboard
 
 
 `train_lstm.py`
-```python [62|81|104-109|113]
+```python [62|81|101-109|112-113]
 import argparse
 import os
 import pickle
@@ -750,7 +766,7 @@ if __name__ == "__main__":
 ### 在本機執行
 
 `run_experiment_training.py`
-```python [36,38|42|53,54,57]
+```python [36,38|42-49|52-57]
 import os
 import argparse
 from azureml.core import ScriptRunConfig, Dataset, Workspace, Experiment
@@ -862,7 +878,8 @@ if __name__ == "__main__":
 ### 執行實驗
 
 ```bash
-python3.7 run_experiment_training.py --file train_lstm.py --target_folder currency
+python3.7 run_experiment_training.py \
+--file train_lstm.py --target_folder currency
 ```
 整個流程大約需要 15 分鐘
 
@@ -881,8 +898,9 @@ python3.7 run_experiment_training.py --file train_lstm.py --target_folder curren
 
 ----
 
-從`workspace`的網頁也可以看到，實驗執行完之後的各種數據視覺化。
-![](media/ml_22.png)
+
+
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_22.png" -->
 
 
 ----
@@ -984,7 +1002,7 @@ def run(raw_data):
 ### 在本機執行
 
 `deploy_currency_prediction.py`
-```python
+```python [23-27|31-35|37-38|39-47]
 import os
 import numpy as np
 from azureml.core import Model, Workspace
@@ -1048,7 +1066,7 @@ if __name__ == "__main__":
 
 <!-- .slide: data-background-color="#ffffff" data-background="media/ml_26.png" -->
 
-- 服務部署完成之後，可以到`workspace`的端點，檢視服務的相關資訊。
+服務部署完成之後，可以到`workspace`的端點，檢視服務的相關資訊。
 
 
 ----
@@ -1056,7 +1074,7 @@ if __name__ == "__main__":
 
 
 <!-- .slide: data-background-color="#ffffff" data-background="media/ml_27.png" -->
-- 點進去剛剛產生的服務，可以看到 REST 端點，這其實就是服務連結，可以透過`POST`使用。 
+點進去剛剛產生的服務，可以看到 REST 端點，這其實就是服務連結，可以透過`POST`使用。 
 
 
 ----
@@ -1064,7 +1082,7 @@ if __name__ == "__main__":
 - 使用服務
 
 `predict_currency_azml.py`
-```python [30]
+```python [24,25,30]
 
 import argparse
 import json
