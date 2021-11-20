@@ -44,7 +44,36 @@
           
         
           
+            
+              <section data-markdown>
+                <textarea data-template>
+                  
+
+## Outline
+
+- Azure 的事前準備
+- Azure Machine Learning & MLOps
+- 從零到開始到部署服務
+- 讓服務自給自足
+
+
+                </textarea>
+              </section>
+            
+          
+        
+          
             <section>
+              
+                <section data-markdown>
+                  <textarea data-template>
+                    
+
+# Azure 的事前準備
+
+
+                  </textarea>
+                </section>
               
                 <section data-markdown>
                   <textarea data-template>
@@ -157,7 +186,7 @@ az login
                   <textarea data-template>
                     
 
-# Azure machine learning
+# Azure Machine Learning & MLOps
   
 
                   </textarea>
@@ -207,9 +236,32 @@ az login
                   </textarea>
                 </section>
               
+            </section>
+          
+        
+          
+            <section>
+              
                 <section data-markdown>
                   <textarea data-template>
                     
+
+# 從零到開始到部署服務 
+
+- Work Space
+- Computer Target
+- Simple Experiment
+- Upload Data
+- Environment
+- Training Experiment & Register Model
+- Deploy Service & Inference
+
+
+                  </textarea>
+                </section>
+              
+                <section data-markdown>
+                  <textarea data-template>
                     
 
 ### 事前準備
@@ -226,12 +278,6 @@ az account list
 
                   </textarea>
                 </section>
-              
-            </section>
-          
-        
-          
-            <section>
               
                 <section data-markdown>
                   <textarea data-template>
@@ -1476,7 +1522,7 @@ def run(raw_data):
 ### 在本機執行
 
 `deploy_currency_prediction.py`
-```python []
+```python [23-27|31-35|37-38|39-47]
 import os
 import numpy as np
 from azureml.core import Model, Workspace
@@ -1546,7 +1592,7 @@ if __name__ == "__main__":
 
 <!-- .slide: data-background-color="#ffffff" data-background="media/ml_26.png" -->
 
-- 服務部署完成之後，可以到`workspace`的端點，檢視服務的相關資訊。
+服務部署完成之後，可以到`workspace`的端點，檢視服務的相關資訊。
 
 
 
@@ -1560,7 +1606,7 @@ if __name__ == "__main__":
 
 
 <!-- .slide: data-background-color="#ffffff" data-background="media/ml_27.png" -->
-- 點進去剛剛產生的服務，可以看到 REST 端點，這其實就是服務連結，可以透過`POST`使用。 
+點進去剛剛產生的服務，可以看到 REST 端點，這其實就是服務連結，可以透過`POST`使用。 
 
 
 
@@ -1574,7 +1620,7 @@ if __name__ == "__main__":
 - 使用服務
 
 `predict_currency_azml.py`
-```python [30]
+```python [24,25,30]
 
 import argparse
 import json
@@ -1631,6 +1677,21 @@ if __name__ == "__main__":
         
           
             <section>
+              
+                <section data-markdown>
+                  <textarea data-template>
+                    
+
+# 讓服務自給自足
+
+- Pipeline
+  - Data
+  - Training and Service
+- Schedule
+
+
+                  </textarea>
+                </section>
               
                 <section data-markdown>
                   <textarea data-template>

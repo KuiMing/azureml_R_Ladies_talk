@@ -2,6 +2,19 @@
 
 ---
 
+## Outline
+
+- Azure 的事前準備
+- Azure Machine Learning & MLOps
+- 從零到開始到部署服務
+- 讓服務自給自足
+
+---
+
+# Azure 的事前準備
+
+----
+
 ## Azure 帳號申請- 免費試用 30 天
 
 - 來這邊註冊：https://login.microsoftonline.com/
@@ -73,7 +86,7 @@ az login
 
 ---
 
-# Azure machine learning
+# Azure Machine Learning & MLOps
   
 ----
                     
@@ -101,8 +114,19 @@ az login
 
 ![](media/ml_33.png)
 
+---
+
+# 從零到開始到部署服務 
+
+- Work Space
+- Computer Target
+- Simple Experiment
+- Upload Data
+- Environment
+- Training Experiment & Register Model
+- Deploy Service & Inference
+
 ----
-                    
 
 ### 事前準備
 
@@ -115,7 +139,7 @@ az account list
 
 
               
----
+----
 
 ## Work Space
 
@@ -1125,6 +1149,15 @@ if __name__ == "__main__":
 <img src=media/ml_35.PNG width=40%></img>
 
 ---
+
+# 讓服務自給自足
+
+- Pipeline
+  - Data
+  - Training and Service
+- Schedule
+
+----
 
 ## Pipeline for data
 
