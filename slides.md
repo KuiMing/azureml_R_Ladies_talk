@@ -2,11 +2,15 @@
 
 ---
 
+<!-- .slide: data-background="media/Ben.png" -->
+
+---
+
 ## Outline
 
 - Azure 的事前準備
 - Azure Machine Learning & MLOps
-- 從零到開始到部署服務
+- 從零開始到部署服務
 - 讓服務自給自足
 
 ---
@@ -116,7 +120,7 @@ az login
 
 ---
 
-# 從零到開始到部署服務 
+# 從零開始到部署服務 
 
 - Work Space
 - Computer Target
@@ -139,7 +143,7 @@ az account list
 
 
               
-----
+---
 
 ## Work Space
 
@@ -229,7 +233,7 @@ except ComputeTargetException:
 cpu_cluster.wait_for_completion(show_output=True)
 ```
 
-[VM size](https://azure.microsoft.com/zh-tw/pricing/details/virtual-machines/ubuntu-advantage-standard/)
+[VM 代號](https://docs.microsoft.com/zh-tw/azure/cloud-services/cloud-services-sizes-specs#dv2-series) 
 
 ----
 
@@ -416,7 +420,7 @@ currency_data.to_csv("currency/training_data.csv")
 
 `upload_file.py`
 
-```python [35-40|42-43]
+```python [35-40|41-43]
 """
 Upload data to Azure machine learning
 """
@@ -905,7 +909,6 @@ if __name__ == "__main__":
 python3.7 run_experiment_training.py \
 --file train_lstm.py --target_folder currency
 ```
-整個流程大約需要 15 分鐘
 
 ----
 
@@ -1779,15 +1782,17 @@ print(sche_list)
 - 才能刪除`pipeline`
 
 ```python
-
-sche = next(s for s in sche_list if s.id == "18ff1269-d837-42b6-85f1-972171ef6216")
+sche = next(s for s in sche_list if s.id ==\
+"18ff1269-d837-42b6-85f1-972171ef6216")
 sche.disable()
 pipe_list = PublishedPipeline.list(work_space)
-pipe = next(p_l.id for p_l in pipe_list if p_l.name == "pipeline_data_train_deploy")
+pipe = next(p_l.id for p_l in pipe_list if p_l.name ==\
+"pipeline_data_train_deploy")
 pipe.disable()
 ```
 
 ---
+
 
 ## 參考資料
 - Azure Machine Learning documentation: https://tinyurl.com/yxzjslm5
@@ -1795,6 +1800,12 @@ pipe.disable()
 - Azure sample code: https://github.com/Azure-Samples/
 - My code: https://github.com/KuiMing/triathlon_azure
 - 鐵人賽: https://ithelp.ithome.com.tw/users/20139923/articles 
+
+---
+
+## 投影片
+
+![](media/QR.png)
 
 ---
 

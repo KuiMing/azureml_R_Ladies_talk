@@ -49,11 +49,25 @@
                 <textarea data-template>
                   
 
+<!-- .slide: data-background="media/Ben.png" -->
+
+
+                </textarea>
+              </section>
+            
+          
+        
+          
+            
+              <section data-markdown>
+                <textarea data-template>
+                  
+
 ## Outline
 
 - Azure 的事前準備
 - Azure Machine Learning & MLOps
-- 從零到開始到部署服務
+- 從零開始到部署服務
 - 讓服務自給自足
 
 
@@ -246,7 +260,7 @@ az login
                   <textarea data-template>
                     
 
-# 從零到開始到部署服務 
+# 從零開始到部署服務 
 
 - Work Space
 - Computer Target
@@ -278,6 +292,12 @@ az account list
 
                   </textarea>
                 </section>
+              
+            </section>
+          
+        
+          
+            <section>
               
                 <section data-markdown>
                   <textarea data-template>
@@ -413,7 +433,7 @@ except ComputeTargetException:
 cpu_cluster.wait_for_completion(show_output=True)
 ```
 
-[VM size](https://azure.microsoft.com/zh-tw/pricing/details/virtual-machines/ubuntu-advantage-standard/)
+[VM 代號](https://docs.microsoft.com/zh-tw/azure/cloud-services/cloud-services-sizes-specs#dv2-series) 
 
 
                   </textarea>
@@ -714,7 +734,7 @@ currency_data.to_csv("currency/training_data.csv")
 
 `upload_file.py`
 
-```python [35-40|42-43]
+```python [35-40|41-43]
 """
 Upload data to Azure machine learning
 """
@@ -1329,7 +1349,6 @@ if __name__ == "__main__":
 python3.7 run_experiment_training.py \
 --file train_lstm.py --target_folder currency
 ```
-整個流程大約需要 15 分鐘
 
 
                   </textarea>
@@ -2431,11 +2450,12 @@ print(sche_list)
 - 才能刪除`pipeline`
 
 ```python
-
-sche = next(s for s in sche_list if s.id == "18ff1269-d837-42b6-85f1-972171ef6216")
+sche = next(s for s in sche_list if s.id ==\
+"18ff1269-d837-42b6-85f1-972171ef6216")
 sche.disable()
 pipe_list = PublishedPipeline.list(work_space)
-pipe = next(p_l.id for p_l in pipe_list if p_l.name == "pipeline_data_train_deploy")
+pipe = next(p_l.id for p_l in pipe_list if p_l.name ==\
+"pipeline_data_train_deploy")
 pipe.disable()
 ```
 
@@ -2452,12 +2472,29 @@ pipe.disable()
                 <textarea data-template>
                   
 
+
 ## 參考資料
 - Azure Machine Learning documentation: https://tinyurl.com/yxzjslm5
 - Azure API: https://docs.microsoft.com/zh-tw/python/api/
 - Azure sample code: https://github.com/Azure-Samples/
 - My code: https://github.com/KuiMing/triathlon_azure
 - 鐵人賽: https://ithelp.ithome.com.tw/users/20139923/articles 
+
+
+                </textarea>
+              </section>
+            
+          
+        
+          
+            
+              <section data-markdown>
+                <textarea data-template>
+                  
+
+## 投影片
+
+![](media/QR.png)
 
 
                 </textarea>
