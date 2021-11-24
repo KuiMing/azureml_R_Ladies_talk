@@ -8,14 +8,14 @@
 
 ## Outline
 
-- Azure 的事前準備
-- Azure Machine Learning & MLOps
+- 事前準備
+- MLOps
 - 從零開始到部署服務
 - 讓服務自給自足
 
 ---
 
-# Azure 的事前準備
+# 事前準備
 
 ----
 
@@ -90,7 +90,7 @@ az login
 
 ---
 
-# Azure Machine Learning & MLOps
+# MLOps
   
 ----
                     
@@ -114,8 +114,6 @@ az login
 
 ----
 
-## MLOps
-
 ![](media/ml_33.png)
 
 ---
@@ -132,7 +130,7 @@ az login
 
 ----
 
-### 事前準備
+### 取得各種 ID
 
 - 執行以下指令，取得 Subscription ID 和 Tenant ID
 ```
@@ -162,9 +160,9 @@ from azureml.core.authentication import InteractiveLoginAuthentication
 interactive_auth = InteractiveLoginAuthentication(tenant_id=os.getenv("TENANT_ID"))
 
 work_space = Workspace.create(
-    name="mltibame",  # 工作區名稱
+    name="mlBen",  # 工作區名稱
     subscription_id="Your subscription key",  
-    resource_group="Tibame",  # 資源群組名稱
+    resource_group="Ben",  # 資源群組名稱
     create_resource_group=True,
     location="eastus2",  
     # example: 'eastus2', or 'southeastasia'.
