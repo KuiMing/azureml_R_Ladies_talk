@@ -151,7 +151,7 @@ az account list
 ## 建立工作區 
 
 `create_workspace.py`
-```python [6|8-15|19]
+```python [6|8-10|11-12|13-16 | 21]
 import os
 from azureml.core import Workspace
 from azureml.core.authentication import InteractiveLoginAuthentication
@@ -166,6 +166,8 @@ work_space = Workspace.create(
     create_resource_group=True,
     location="eastus2",  
     # example: 'eastus2', or 'southeastasia'.
+    # 執行執行`az account list-locations -o table`
+    # 會列出所有區域相對應的代碼
 )
 
 # write out the workspace details to the file: 
@@ -173,7 +175,6 @@ work_space = Workspace.create(
 work_space.write_config(path=".azureml")
 
 ```
-
 
               
 ----
@@ -204,7 +205,7 @@ work_space.write_config(path=".azureml")
 ## 建立運算群組
 
 `create_compute.py`
-```python [19-20]
+```python [7-9|19-20]
 import os
 from azureml.core import Workspace
 from azureml.core.compute import ComputeTarget, AmlCompute
