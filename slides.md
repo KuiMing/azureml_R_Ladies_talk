@@ -130,6 +130,16 @@ az login
 
 ----
 
+
+### 安裝`Python`套件
+
+請在本地端安裝
+```bash
+pip3.7 install azureml-core
+```
+
+----
+
 ### 取得各種 ID
 
 - 執行以下指令，取得 Subscription ID 和 Tenant ID
@@ -359,8 +369,8 @@ python3.7 run_experiment.py
 ## 以台幣-美金匯率為例
 
 - [investing.com](https://investing.com)
-- 債券、憑證、期貨、指數和股票，應有盡有
-- 有`Python`套件可以使用
+  - 匯率、債券、憑證、期貨、指數和股票，應有盡有
+  - 有 `Python` 套件可以使用
 
 ----
 
@@ -560,8 +570,11 @@ h5py==2.10.0
 
 ----
 
-- 註冊完之後，可以從環境的頁面看到自訂環境內，有剛剛註冊完的環境
-![](media/ml_18.png)
+
+
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_18.png" -->
+
+註冊完之後，可以從環境的頁面看到自訂環境內，有剛剛註冊完的環境
 
 
 ----
@@ -722,7 +735,7 @@ def main():
     Training of LeNet with keras
     """
     args = parse_args()
-    run = Run.get_context()
+    run = Run.get_context() # 取得目前的服務內容
     # 從 datastore 讀取資料，並且加以整理
     usd_twd = pd.read_csv(os.path.join(args.target_folder, "training_data.csv"))
     data = usd_twd.Close.values.reshape(-1, 1)
@@ -742,7 +755,7 @@ def main():
         model.compile(loss="mse", optimizer="adam")
         # Tensorboard
         callback = TensorBoard(
-            log_dir=args.log_folder,
+            log_dir="./logs",
             histogram_freq=0,
             write_graph=True,
             write_images=True,
@@ -793,7 +806,7 @@ if __name__ == "__main__":
 ### 在本機執行
 
 `run_experiment_training.py`
-```python [36,38|42-49|52-57]
+```python [31-33|36,38|42-44|52-57|67-75|78-90]
 import os
 import argparse
 from azureml.core import ScriptRunConfig, Dataset, Workspace, Experiment
@@ -1159,7 +1172,7 @@ if __name__ == "__main__":
   - Training and Service
 - Schedule
 
-----
+---
 
 ## Pipeline for data
 
@@ -1177,7 +1190,7 @@ if __name__ == "__main__":
 ### 在`workspace`執行的 code
 
 `get_currency.py`
-```python [61-64|65-67]
+```python [58,61-64|65-67]
 import argparse
 from datetime import datetime
 import os
@@ -1342,6 +1355,13 @@ if __name__ == "__main__":
 
 <!-- .slide: data-background-color="#ffffff" data-background="media/ml_29.png" -->
 點進`步驟`，再點選執行完的步驟，則會看到該實驗的各種細節，也方便後續除錯。
+
+
+
+----
+
+
+<!-- .slide: data-background-color="#ffffff" data-background="media/ml_14.png" -->
 
 ---
 ## Pipeline for model and service
@@ -1751,7 +1771,7 @@ if __name__ == "__main__":
 
 ----
 
-## 確認排成相關資訊
+## 確認排程相關資訊
 
 
 ```python
@@ -1804,7 +1824,7 @@ pipe.disable()
 
 ## 投影片
 
-![](media/QR.png)
+<img src=media/QR.png width=60%>
 
 ---
 
