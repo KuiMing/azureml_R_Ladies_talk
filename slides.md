@@ -1172,6 +1172,15 @@ if __name__ == "__main__":
   - Training and Service
 - Schedule
 
+----
+
+### 安裝`Python`套件
+
+請在本機端安裝
+```bash
+pip3.7 install azureml-pipeline
+```
+
 ---
 
 ## Pipeline for data
@@ -1185,14 +1194,7 @@ if __name__ == "__main__":
   - 在`workspace`定期執行的程式碼
   - 在本地端執行，把上述的程式碼上傳到`workspace`
 
-----
 
-### 安裝`Python`套件
-
-請在本機端安裝
-```bash
-pip3.7 install azureml-pipeline
-```
 ----
 
 ### 在`workspace`執行的 code
