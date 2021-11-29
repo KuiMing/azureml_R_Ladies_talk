@@ -1187,6 +1187,14 @@ if __name__ == "__main__":
 
 ----
 
+### 安裝`Python`套件
+
+請在本機端安裝
+```bash
+pip3.7 install azureml-pipeline
+```
+----
+
 ### 在`workspace`執行的 code
 
 `get_currency.py`
